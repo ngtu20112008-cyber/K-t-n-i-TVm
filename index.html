@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Screen Cast</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body class="bg-gray-900 text-white font-sans min-h-screen">
+
+    <div id="role-selection" class="flex flex-col items-center justify-center min-h-screen p-6">
+        <div class="max-w-md w-full bg-gray-800 rounded-2xl shadow-2xl p-8 text-center border border-gray-700">
+            <h1 class="text-3xl font-bold mb-2">Web Cast</h1>
+            <p class="text-gray-400 mb-8">Chia sẻ màn hình điện thoại lên TV cùng Wi-Fi.</p>
+            <div class="space-y-4">
+                <button onclick="startTVMode()" class="w-full px-6 py-4 bg-indigo-600 hover:bg-indigo-700 rounded-xl transition font-semibold text-lg cursor-pointer">
+                    📺 Tôi là TV (Nhận tín hiệu)
+                </button>
+                <button onclick="startPhoneMode()" class="w-full px-6 py-4 bg-emerald-600 hover:bg-emerald-700 rounded-xl transition font-semibold text-lg cursor-pointer">
+                    📱 Tôi là Điện thoại (Gửi)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="tv-mode" class="hidden flex-col h-screen">
+        <div id="tv-setup" class="flex-1 flex flex-col items-center justify-center p-6 text-center">
+            <h2 class="text-2xl font-semibold mb-2">Mã kết nối của TV</h2>
+            <div id="tv-code" class="text-6xl font-black text-white tracking-widest bg-gray-800 px-8 py-4 rounded-xl border border-indigo-500 shadow-lg mb-6">-----</div>
+            <p id="tv-status" class="text-gray-400 max-w-md">Đang khởi tạo mã...</p>
+            <button onclick="location.reload()" class="mt-8 text-gray-500 hover:text-white underline cursor-pointer">Quay lại</button>
+        </div>
+        <div id="tv-video-container" class="hidden relative w-full h-screen bg-black flex items-center justify-center">
+            <video id="remote-video" autoplay playsinline class="max-w-full max-h-full object-contain"></video>
+            <button onclick="location.reload()" class="absolute top-4 right-4 bg-gray-900/70 px-4 py-2 rounded-full hover:bg-red-600 transition cursor-pointer">❌ Thoát</button>
+        </div>
+    </div>
+
+    <div id="phone-mode" class="hidden flex-col items-center justify-center min-h-screen p-6 text-center">
+        <div class="max-w-md w-full bg-gray-800 rounded-3xl shadow-xl p-8 border border-gray-700">
+            <h2 class="text-2xl font-bold mb-6">Chiếu màn hình</h2>
+            
+            <div id="phone-input-section">
+                <div class="mb-8">
+                    <label class="block text-gray-400 text-sm font-medium mb-2 text-left">Nhập mã hiện trên TV</label>
+                    <input id="target-tv-code" type="text" placeholder="Ví dụ: 12345" class="w-full bg-gray-900 border border-gray-600 rounded-xl px-4 py-4 text-center text-3xl font-bold tracking-widest text-white focus:outline-none focus:border-emerald-500">
+                </div>
+                <button onclick="startCasting()" class="w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl text-lg font-bold cursor-pointer">🚀 Bắt đầu chia sẻ</button>
+            </div>
+
+            <div id="phone-casting-section" class="hidden py-8">
+                <div class="w-24 h-24 rounded-full bg-emerald-500/20 border-4 border-emerald-500 flex items-center justify-center mx-auto mb-6 animate-pulse text-3xl">📡</div>
+                <h3 class="text-xl font-bold text-emerald-400 mb-2">Đang trình chiếu</h3>
+                <p class="text-gray-400 mb-8">Màn hình điện thoại đang được gửi tới TV.</p>
+                <button onclick="stopCasting()" class="w-full bg-red-600 hover:bg-red-500 py-4 rounded-xl text-lg font-bold cursor-pointer">🛑 Ngừng chia sẻ</button>
+            </div>
+            
+            <p id="phone-status" class="mt-6 text-sm text-emerald-400 font-medium"></p>
+            <button onclick="location.reload()" class="mt-4 text-gray-500 hover:text-white underline cursor-pointer block mx-auto">Quay lại</button>
+        </div>
+    </div>
+
+    <script>
+        let peer = null;
+        let localStream = null;
+        let currentCall = null;
+
+        function showScreen(screenId) {
+            document.getElementById('role-selection').classList.add('hidden');
+            document.getElementById('tv-mode').classList.add('hidden');
+            document.getElementById('phone-mode').classList.add('hidden');
+            document.getElementById(screenId).classList.remove('hidden');
+        }
+
+        // --- LOGIC TV ---
+        function startTVMode() {
+            showScreen('tv-mode');
+            const randomId = Math.floor(10000 + Math.random() * 90000).toString();
+            peer = new Peer(randomId);
+
+            peer.on('open', (id) => {
+                document.getElementById('tv-code').innerText = id;
+                document.getElementById('tv-status').innerText = 'Đang chờ điện thoại kết nối...';
+            });
+
+            peer.on('call', (call) => {
+                document.getElementById('tv-status').innerText = 'Đang kết nối...';
+                call.answer();
+                call.on('stream', (remoteStream) => {
+                    document.getElementById('tv-setup').classList.add('hidden');
+                    document.getElementById('tv-video-container').classList.remove('hidden');
+                    document.getElementById('remote-video').srcObject = remoteStream;
+                });
+            });
+        }
+
+        // --- LOGIC ĐIỆN THOẠI ---
+        function startPhoneMode() {
+            showScreen('phone-mode');
+            peer = new Peer();
+            peer.on('open', () => document.getElementById('phone-status').innerText = 'Sẵn sàng kết nối');
+            peer.on('error', (err) => document.getElementById('phone-status').innerText = 'Lỗi: Không tìm thấy TV');
+        }
+
+        async function startCasting() {
+            const code = document.getElementById('target-tv-code').value.trim();
+            if (!code) return alert('Vui lòng nhập mã TV');
+
+            try {
+                document.getElementById('phone-status').innerText = 'Đang xin quyền màn hình...';
+                localStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+                
+                localStream.getVideoTracks()[0].onended = () => stopCasting();
+
+                document.getElementById('phone-status').innerText = 'Đang kết nối tới TV...';
+                currentCall = peer.call(code, localStream);
+
+                document.getElementById('phone-input-section').classList.add('hidden');
+                document.getElementById('phone-casting-section').classList.remove('hidden');
+                document.getElementById('phone-status').innerText = 'Đang chiếu!';
+            } catch (err) {
+                document.getElementById('phone-status').innerText = 'Lỗi hoặc bạn đã từ chối quyền.';
+            }
+        }
+
+        function stopCasting() {
+            if (currentCall) currentCall.close();
+            if (localStream) localStream.getTracks().forEach(track => track.stop());
+            location.reload();
+        }
+    </script>
+</body>
+</html>
